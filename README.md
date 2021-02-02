@@ -1,16 +1,17 @@
 # Handler源码学习记录（java层、native层）
 
-模仿Handler原理，使用eventfd+epoll实现Handler基础功能的小案例 -> 
-[gayhub地址]: https://github.com/OBaKai/MessageQueueDemo	"gayhub地址"
+宗旨：学习记录我看得懂就行！！！
+
+模仿Handler原理，使用eventfd+epoll实现Handler基础功能的小案例 -> [gayhub地址](https://github.com/OBaKai/MessageQueueDemo)
 
 ## java层
 
-#### Handler（线程间切换的工具类）
+#### Handler.java（线程间切换的工具类）
 
-##### Handler有三种消息
-同步消息：最常用的消息；
-屏障消息（同步屏障）：该消息无target。在消息队列中插入后会挡住后边的所有同步消息让异步消息先走。撤销该屏障同步消息才能继续通行；
-异步消息：享有优先权的消息。
+##### 三种消息类型
+**同步消息：**最常用的消息；
+**屏障消息（同步屏障）：**该消息无target。在消息队列中插入后会挡住后边的所有同步消息让异步消息先走。撤销该屏障同步消息才能继续通行；
+**异步消息：**享有优先权的消息。
 
 ```java
 //构函数中有boolean async传参的，都是隐藏的不希望开发者使用。
@@ -31,7 +32,7 @@ private boolean enqueueMessage(MessageQueue queue, Message msg, long uptimeMilli
 }
 ```
 
-#### Looper
+#### Looper.java
 ```java
 private Looper(boolean quitAllowed) {
         mQueue = new MessageQueue(quitAllowed); //创建队列
@@ -42,11 +43,8 @@ private Looper(boolean quitAllowed) {
 private static void prepare(boolean quitAllowed) { 
 		// 参数quitAllowed，是否允许Looper退出。
 		// MainLooper prepareMainLooper 中是false，主线程的Looper不允许退出。子线程的Looper是允许退出的。
-
         ... 
-
         sThreadLocal.set(new Looper(quitAllowed)); //Looper保证线程唯一
-
 		...        
 }
 
@@ -59,31 +57,18 @@ public static void loop() {
             	throw new RuntimeException("No Looper; Looper.prepare() wasn't called on this thread.");
         	}
         	final MessageQueue queue = me.mQueue;
-
-			...
-
-	        for (;;) { //死循环
-	        //从队列获取Message
-            Message msg = queue.next(); // might block 
-
+					...
+	        for (;;) { //死循环，这就是主线程不退出的原因。
+	          //从队列获取Message
+            Message msg = queue.next(); //会阻塞
             ...
-            
             try {
                 msg.target.dispatchMessage(msg); //执行事件
-
                 ...
-
-            } finally {
-
-                ...
-
-            }
-            
+            } 
             ...
-
             msg.recycleUnchecked(); //释放该Message
         }
-
         ...
 }
 
@@ -98,7 +83,9 @@ public void quitSafely() { //安全退出，不再接受消息，并且清空所
 }
 ```
 
-#### MessageQueue
+#### MessageQueue.java
+
+备注：注释中 Msg代表同步消息，Msg(A)代表异步消息，|代表屏障消息
 
 ```java
 //native方法
@@ -106,26 +93,31 @@ private native static long nativeInit();
 private native static void nativeDestroy(long ptr);
 private native void nativePollOnce(long ptr, int timeoutMillis);
 private native static void nativeWake(long ptr);
-private native static boolean nativeIsPolling(long ptr);
-private native static void nativeSetFileDescriptorEvents(long ptr, int fd, int events);
+private native static boolean nativeIsPolling(long ptr); //是否正在轮询
 
 private final boolean mQuitAllowed; //是否允许退出（主线程是false的）
-
+private long mPtr; //NativeMessageQueue指针地址，靠它强转回NativeMessageQueue*对象
 Message mMessages; //消息队列Head（链表）
-
 private boolean mQuitting; //是否退出中
-
 private boolean mBlocked; //是否在阻塞中
+
+MessageQueue(boolean quitAllowed) {
+        mQuitAllowed = quitAllowed;
+        mPtr = nativeInit();
+    }
+
+private void dispose() {
+        if (mPtr != 0) {
+            nativeDestroy(mPtr);
+            mPtr = 0;
+        }
+    }
 
 //消息入队方法
 boolean enqueueMessage(Message msg, long when) {
-        
         ...
-
         synchronized (this) {
-            
             ...
-
             msg.when = when; //执行时间 (系统时间 + 延迟时间)
             Message p = mMessages;
             boolean needWake; //是否需要唤醒
@@ -134,7 +126,6 @@ boolean enqueueMessage(Message msg, long when) {
             //情况2：使用sendMessageAtFrontOfQueue方法入队，这个放啊when就是为0
             //情况3：新来的这条消息执行时间比队列中所有消息的执行时间都要快，给它先执行。
             if (p == null || when == 0 || when < p.when) {
-                // New head, wake up the event queue if blocked.
                 msg.next = p;
                 mMessages = msg;
                 needWake = mBlocked;
@@ -150,28 +141,28 @@ boolean enqueueMessage(Message msg, long when) {
                 //当前队列 Msg1 -> null
                 //上边p的赋值，p = Msg1
                 //for (;;) {
-                //    prev = p; //prev = Msg1
-                //    p = p.next; //p = null
-                //    if (p == null) { //退出循环
+                //    prev = p;         //prev = Msg1
+                //    p = p.next;       //p = null
+                //    if (p == null) {  //退出循环
                 //        break;
                 //    }
                 //}
-                //msg.next = p; //Msg2 -> null
-                //prev.next = msg; //Msg1 -> Msg2 -> null
+                //msg.next = p;         //Msg2 -> null
+                //prev.next = msg;      //Msg1 -> Msg2 -> null
 
                 //情况2 (如果Msg3 when 小于 Msg2，那么会走if的情况3)
-                //入队的是Msg3（when 15）
-                //当前队列 Msg2（when 10） -> Msg1（when 20） -> null
+                //入队的是Msg3(when 15)
+                //当前队列 Msg2(when 10) -> Msg1(when 20) -> null
                 //上边p的赋值，p = Msg2
                 //for (;;) {
-                //    prev = p; //prev = Msg2
-                //    p = p.next; //p = Msg1
+                //    prev = p;            //prev = Msg2
+                //    p = p.next;          //p = Msg1
                 //    if (when < p.when) { //15 < 20 退出循环
                 //        break;
                 //    }
                 //}
-                //msg.next = p; //Msg3 -> Msg1 -> null
-                //prev.next = msg; //Msg2 -> Msg3 -> Msg1 -> null
+                //msg.next = p;            //Msg3 -> Msg1 -> null
+                //prev.next = msg;         //Msg2 -> Msg3 -> Msg1 -> null
 
                 Message prev;
                 for (;;) {
@@ -181,17 +172,19 @@ boolean enqueueMessage(Message msg, long when) {
                         break;
                     }
                     
-                    //Msg3（A）
-                    //| -> Msg2(A) -> Msg1 -> null
+                  	//情况3
+                    //入队的是Msg3
+                    //当前队列 | -> Msg2(A) -> Msg1 -> null
                     //prv = |
                     //p = Msg2(A)
-                    //3 -> 2 -> 1 -> null
-                    //| -> 3 -> 2 -> 1 -> null
-                    //??? 这个逻辑没看懂
+                    //msg.next = p;    // Msg3 -> Msg2(A) -> Msg1 -> null
+                    //prev.next = msg; // | -> Msg3 -> Msg2(A) -> Msg1 -> null
                     if (needWake && p.isAsynchronous()) {
+                        //有屏障消息会先执行Msg2(A)，但是呢Msg2(A)时辰未到，不能唤醒。
                         needWake = false;
                     }
                 }
+                //新伙伴入队后连接链表
                 msg.next = p;
                 prev.next = msg;
             }
@@ -379,9 +372,7 @@ public void removeSyncBarrier(int token) { //传入消息屏障身份id
 
 //退出消息队列
 void quit(boolean safe) { //是否为安全退出
-        
         ...
-
         synchronized (this) {
             if (mQuitting) {
                 return;
@@ -448,14 +439,49 @@ private void removeAllFutureMessagesLocked() {
 
 ```
 
-## native层
-#### 源码位置（也放了一份在这里 -> MessageQueueDemo/native_source_code/）
-android-6.0/system/core/libutils/Looper.cpp
-android-6.0/system/core/include/utils/Looper.h
-android-6.0/frameworks/base/core/jni/android_os_MessageQueue.cpp
-android-6.0/frameworks/base/core/jni/android_os_MessageQueue.h
+## native层（eventfd + epoll）
+我看的是android6.0源码，eventfd负责通知，不知道啥版本之前是用pipe(管道)实现的通知后面被eventfd取代。epoll(IO多路复用)负责监听。这两个系统调用的科普在下面注释会有。
+
+为啥？我理解是eventfd占用的fd比pipe要少，pipe要占用两个一个读一个写。
+
+#### 源码文件整合（位置 -> MessageQueueDemo/native_source_code/）
+
+#### 源码地址：
+
+###### android-6.0/system/core/libutils/Looper.cpp
+###### android-6.0/system/core/include/utils/Looper.h
+###### android-6.0/frameworks/base/core/jni/android_os_MessageQueue.cpp
+###### android-6.0/frameworks/base/core/jni/android_os_MessageQueue.h
 
 ```objectivec
+/*
+ 备注：
+ native Looper中
+    函数
+    addFd
+    removeFd
+    sendMessage
+    sendMessageDelayed
+    removeMessages
+    ...
+
+    结构体
+    Message
+    Request
+    Response
+    ...
+
+    类
+    MessageHandler
+    WeakMessageHandler
+    ...
+
+    还有向量mRequest、mResponse等等
+    都是提供给native开发者使用消息队列相关逻辑（可以理解为native层的handler）。
+    与java层无关的。（o(╥﹏╥)o痛苦，刚开始看一脸懵逼。）
+*/
+
+//java层中native方法对应的函数
 static JNINativeMethod gMessageQueueMethods[] = {
     /* name, signature, funcPtr */
     { "nativeInit", "()J", (void*)android_os_MessageQueue_nativeInit },
@@ -471,16 +497,14 @@ static JNINativeMethod gMessageQueueMethods[] = {
 int register_android_os_MessageQueue(JNIEnv* env) {
     int res = RegisterMethodsOrDie(env, "android/os/MessageQueue", gMessageQueueMethods,
                                    NELEM(gMessageQueueMethods));
-
     jclass clazz = FindClassOrDie(env, "android/os/MessageQueue");
     gMessageQueueClassInfo.mPtr = GetFieldIDOrDie(env, clazz, "mPtr", "J");
     gMessageQueueClassInfo.dispatchEvents = GetMethodIDOrDie(env, clazz,
             "dispatchEvents", "(II)I");
-
     return res;
 }
 
-
+//❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀
 
 //native层核心是Looper对eventfb + epoll的封装。
 static jlong android_os_MessageQueue_nativeInit(JNIEnv* env, jclass clazz) {
@@ -507,36 +531,6 @@ NativeMessageQueue::NativeMessageQueue() :
         Looper::setForThread(mLooper);
     }
 }
-
-
-/*
- 备注：
- native Looper中
-    函数
-    addFd
-    removeFd
-    sendMessage
-    sendMessageDelayed
-    removeMessages
-    ...
-
-
-    结构体
-    Message
-    Request
-    Response
-    ...
-
-    类
-    MessageHandler
-    WeakMessageHandler
-    ...
-
-    还有向量mRequest、向量mResponse等等
-    都是提供给native层使用Looper的相关逻辑来的。
-    与java层无关的。
-*/
-
 
 Looper::Looper(bool allowNonCallbacks) :
         mAllowNonCallbacks(allowNonCallbacks), mSendingMessage(false),
@@ -640,8 +634,7 @@ void Looper::rebuildEpollLocked() {
 
 }
 
-
-
+//❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀
 
 void NativeMessageQueue::pollOnce(JNIEnv* env, jobject pollObj, int timeoutMillis) {
     mPollEnv = env;
@@ -735,16 +728,11 @@ void Looper::awoken() {
     TEMP_FAILURE_RETRY(read(mWakeEventFd, &counter, sizeof(uint64_t))); 
 }
 
-
-
-
-
-
+//❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀
 
 void NativeMessageQueue::wake() {
     mLooper->wake();
 }
-
 
 void Looper::wake() {
 #if DEBUG_POLL_AND_WAKE
@@ -760,4 +748,17 @@ void Looper::wake() {
         }
     }
 }
+
+//❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀
+
+static void android_os_MessageQueue_nativeDestroy(JNIEnv* env, jclass clazz, jlong ptr) {
+    NativeMessageQueue* nativeMessageQueue = reinterpret_cast<NativeMessageQueue*>(ptr);
+    nativeMessageQueue->decStrong(env); //智能指针 强引用计数减1
+}
 ```
+
+
+
+#### 总结：
+
+read the fucking source code.
