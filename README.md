@@ -1,14 +1,16 @@
 # Handler源码学习记录（java层、native层）
 
+模仿Handler原理，使用eventfd+epoll实现Handler基础功能的小案例 -> 
+[gayhub地址]: https://github.com/OBaKai/MessageQueueDemo	"gayhub地址"
+
 ## java层
 
-#### Handler
-一个壳子，封装好api给开发者使用的。
+#### Handler（线程间切换的工具类）
 
 ##### Handler有三种消息
-同步消息：最常用的消息
-屏障消息（同步屏障）：该消息无target。在消息队列中插入后，会挡住后边的所有同步消息，让异步消息先走。撤销该屏障，同步消息才能继续通行。
-异步消息：享有优先权的消息
+同步消息：最常用的消息；
+屏障消息（同步屏障）：该消息无target。在消息队列中插入后会挡住后边的所有同步消息让异步消息先走。撤销该屏障同步消息才能继续通行；
+异步消息：享有优先权的消息。
 
 ```java
 //构函数中有boolean async传参的，都是隐藏的不希望开发者使用。
@@ -16,7 +18,7 @@
 //开发者如果需要用到异步消息，将Message手动setAsynchronous就可以了。
 @hide
 public Handler(boolean async) {
-    //...
+    ...
     mAsynchronous = async;
 }
 
@@ -98,6 +100,8 @@ public void quitSafely() { //安全退出，不再接受消息，并且清空所
 
 #### MessageQueue
 
+```java
+//native方法
 private native static long nativeInit();
 private native static void nativeDestroy(long ptr);
 private native void nativePollOnce(long ptr, int timeoutMillis);
@@ -105,10 +109,9 @@ private native static void nativeWake(long ptr);
 private native static boolean nativeIsPolling(long ptr);
 private native static void nativeSetFileDescriptorEvents(long ptr, int fd, int events);
 
-```java
 private final boolean mQuitAllowed; //是否允许退出（主线程是false的）
 
-Message mMessages; //消息队列（链表）
+Message mMessages; //消息队列Head（链表）
 
 private boolean mQuitting; //是否退出中
 
