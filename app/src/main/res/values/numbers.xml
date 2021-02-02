@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <integer name="tab_anim_duration">15</integer>
+    <integer name="loading_anim_duration">70</integer>
+    <integer name="living_icon_anim_duration">60</integer>
+    <integer name="dy_like_anim_duration">37</integer>
+</resources>
