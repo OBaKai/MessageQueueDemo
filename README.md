@@ -514,6 +514,7 @@ static jlong android_os_MessageQueue_nativeInit(JNIEnv* env, jclass clazz) {
         return 0;
     }
 
+    //RefBase相关文章 https://blog.csdn.net/u012124438/article/details/71075423
     nativeMessageQueue->incStrong(env); //强引用指针计数，智能指针（RefBase）
 
     //强转为jlong，这个jlong是nativeMessageQueue地址
@@ -753,7 +754,7 @@ void Looper::wake() {
 
 static void android_os_MessageQueue_nativeDestroy(JNIEnv* env, jclass clazz, jlong ptr) {
     NativeMessageQueue* nativeMessageQueue = reinterpret_cast<NativeMessageQueue*>(ptr);
-    nativeMessageQueue->decStrong(env); //智能指针 强引用计数减1
+    nativeMessageQueue->decStrong(env); //智能指针 强引用计数减1，当引用数为0会自动调用析构函数
 }
 ```
 
