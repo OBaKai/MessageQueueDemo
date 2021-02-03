@@ -1,9 +1,10 @@
+# 模仿Handler原理，使用eventfd+epoll实现Handler基础功能的小案例
+
 # Handler源码学习记录（java层、native层）
 
 宗旨：学习记录我看得懂就行！！！
-文章地址：https://blog.csdn.net/yudan505/article/details/113581089
 
-模仿Handler原理，使用eventfd+epoll实现Handler基础功能的小案例 -> [gayhub地址(MessageQueueDemo)](https://github.com/OBaKai/MessageQueueDemo)
+文章地址：https://blog.csdn.net/yudan505/article/details/113581089
 
 ## java层
 
