@@ -1,17 +1,18 @@
 # Handler源码学习记录（java层、native层）
 
 宗旨：学习记录我看得懂就行！！！
+文章地址：https://blog.csdn.net/yudan505/article/details/113581089
 
-模仿Handler原理，使用eventfd+epoll实现Handler基础功能的小案例 -> [gayhub地址](https://github.com/OBaKai/MessageQueueDemo)
+模仿Handler原理，使用eventfd+epoll实现Handler基础功能的小案例 -> [gayhub地址(MessageQueueDemo)](https://github.com/OBaKai/MessageQueueDemo)
 
 ## java层
 
 #### Handler.java（线程间切换的工具类）
 
 ##### 三种消息类型
-**同步消息：**最常用的消息；
-**屏障消息（同步屏障）：**该消息无target。在消息队列中插入后会挡住后边的所有同步消息让异步消息先走。撤销该屏障同步消息才能继续通行；
-**异步消息：**享有优先权的消息。
+同步消息：最常用的消息；
+屏障消息（同步屏障）：该消息无target。在消息队列中插入后会挡住后边的所有同步消息让异步消息先走。撤销该屏障同步消息才能继续通行；
+异步消息：享有优先权的消息。
 
 ```java
 //构函数中有boolean async传参的，都是隐藏的不希望开发者使用。
@@ -444,14 +445,13 @@ private void removeAllFutureMessagesLocked() {
 
 为啥？我理解是eventfd占用的fd比pipe要少，pipe要占用两个一个读一个写。
 
-#### 源码文件整合（位置 -> MessageQueueDemo/native_source_code/）
+#### 源码文件整合（位置 -> [MessageQueueDemo/native_source_code/](https://github.com/OBaKai/MessageQueueDemo/tree/master/native_source_code)）
 
 #### 源码地址：
-
-###### android-6.0/system/core/libutils/Looper.cpp
-###### android-6.0/system/core/include/utils/Looper.h
-###### android-6.0/frameworks/base/core/jni/android_os_MessageQueue.cpp
-###### android-6.0/frameworks/base/core/jni/android_os_MessageQueue.h
+android-6.0/system/core/libutils/Looper.cpp
+android-6.0/system/core/include/utils/Looper.h
+android-6.0/frameworks/base/core/jni/android_os_MessageQueue.cpp
+android-6.0/frameworks/base/core/jni/android_os_MessageQueue.h
 
 ```objectivec
 /*
